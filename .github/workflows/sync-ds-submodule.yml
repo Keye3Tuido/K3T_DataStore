@@ -1,0 +1,60 @@
+name: Sync ds Submodule
+
+on:
+  repository_dispatch:
+    types: [update-ds-submodule]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-ds-submodule
+  cancel-in-progress: false
+
+jobs:
+  sync-ds:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout parent repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.K3T_REPOS }}
+          ref: main
+          fetch-depth: 0
+          submodules: false
+
+      - name: Allow token auth for private submodule repository
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config --global url."https://x-access-token:${{ secrets.K3T_REPOS }}@github.com/".insteadOf "https://github.com/"
+
+      - name: Sync ds submodule to latest tracked branch commit
+        id: update
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git submodule sync --recursive
+          git submodule update --init --remote ds
+
+          if git diff --quiet -- ds; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No submodule pointer change detected."
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "new_sha=$(git -C ds rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Commit and push updated submodule pointer
+        if: steps.update.outputs.changed == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add ds
+          git commit -m "chore(submodule): update ds to ${{ steps.update.outputs.new_sha }}"
+          git push origin HEAD:main
