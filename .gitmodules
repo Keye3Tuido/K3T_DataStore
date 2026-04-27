@@ -2,4 +2,3 @@
 	path = ds
 	url = https://github.com/Keye3Tuido/K3T_private.git
 	branch = DataStore
-	shallow = true
